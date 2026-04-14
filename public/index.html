@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamAMG Media Asset API — Test Console</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e1e4e8; padding: 24px; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { color: #8b949e; font-size: 0.85rem; margin-bottom: 24px; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1200px; }
+    .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+    .panel h2 { font-size: 1rem; margin-bottom: 12px; color: #58a6ff; }
+    .panel h3 { font-size: 0.85rem; margin: 12px 0 8px; color: #8b949e; }
+    label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e1e4e8; font-size: 0.85rem; margin-bottom: 8px; }
+    button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600; margin-right: 6px; margin-bottom: 6px; }
+    .btn-primary { background: #238636; color: #fff; }
+    .btn-danger { background: #da3633; color: #fff; }
+    .btn-secondary { background: #30363d; color: #e1e4e8; }
+    .btn-warning { background: #d29922; color: #000; }
+    button:hover { opacity: 0.85; }
+    .response-box { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 12px; font-family: 'SF Mono', monospace; font-size: 0.75rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin-top: 8px; }
+    .event-log { max-height: 400px; }
+    .event-entry { padding: 6px 0; border-bottom: 1px solid #21262d; }
+    .event-type { font-weight: 600; }
+    .event-type.created { color: #238636; }
+    .event-type.complete { color: #58a6ff; }
+    .event-type.failed { color: #da3633; }
+    .event-type.published { color: #d29922; }
+    .event-type.unpublished { color: #8b949e; }
+    .event-type.deleted { color: #da3633; }
+    .event-type.updated { color: #bc8cff; }
+    .event-time { color: #484f58; font-size: 0.7rem; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .status-dot.connected { background: #238636; }
+    .status-dot.disconnected { background: #da3633; }
+    .asset-row { padding: 8px; border: 1px solid #30363d; border-radius: 4px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .asset-row:hover { border-color: #58a6ff; }
+    .asset-row .title { font-weight: 600; font-size: 0.85rem; }
+    .asset-row .meta { font-size: 0.75rem; color: #8b949e; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+    .badge.processing { background: #1f2937; color: #60a5fa; }
+    .badge.ready { background: #1a2e1a; color: #4ade80; }
+    .badge.published { background: #2a2000; color: #fbbf24; }
+    .badge.unpublished { background: #1f2937; color: #8b949e; }
+    .badge.failed { background: #2d1111; color: #f87171; }
+    .selected { border-color: #58a6ff !important; background: #1a2332; }
+    .actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .full-width { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <h1>StreamAMG Media Asset API</h1>
+  <p class="subtitle">Test console for verifying API behaviour, event system, and SSE stream</p>
+
+  <div class="layout">
+    <!-- Create Asset -->
+    <div class="panel">
+      <h2>Create Asset</h2>
+      <label>Title</label>
+      <input type="text" id="create-title" placeholder="e.g. Match Highlights" value="Match Highlights">
+      <label>Content Type</label>
+      <select id="create-type">
+        <option value="video">video</option>
+        <option value="audio">audio</option>
+        <option value="live-stream">live-stream</option>
+      </select>
+      <label>Description (optional)</label>
+      <input type="text" id="create-desc" placeholder="e.g. Premier League highlights">
+      <button class="btn-primary" onclick="createAsset()">Create Asset</button>
+    </div>
+
+    <!-- Asset List -->
+    <div class="panel">
+      <h2>Assets</h2>
+      <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+        <select id="filter-status" style="flex:1" onchange="loadAssets()">
+          <option value="">All statuses</option>
+          <option value="processing">processing</option>
+          <option value="ready">ready</option>
+          <option value="published">published</option>
+          <option value="unpublished">unpublished</option>
+          <option value="failed">failed</option>
+        </select>
+        <select id="filter-type" style="flex:1" onchange="loadAssets()">
+          <option value="">All types</option>
+          <option value="video">video</option>
+          <option value="audio">audio</option>
+          <option value="live-stream">live-stream</option>
+        </select>
+      </div>
+      <button class="btn-secondary" onclick="loadAssets()">Refresh</button>
+      <div id="asset-list" style="margin-top: 8px;"></div>
+    </div>
+
+    <!-- Selected Asset Actions -->
+    <div class="panel">
+      <h2>Selected Asset</h2>
+      <div id="selected-info" style="color: #8b949e; font-size: 0.85rem;">No asset selected — click one from the list</div>
+      <div id="asset-actions" style="display:none;">
+        <div class="actions">
+          <button class="btn-primary" onclick="processAsset(false)">Process (ready)</button>
+          <button class="btn-danger" onclick="processAsset(true)">Process (fail)</button>
+          <button class="btn-warning" onclick="publishAsset()">Publish</button>
+          <button class="btn-secondary" onclick="unpublishAsset()">Unpublish</button>
+          <button class="btn-danger" onclick="deleteAsset()">Delete</button>
+          <button class="btn-secondary" onclick="viewHistory()">View History</button>
+        </div>
+        <div class="response-box" id="action-response">Action responses will appear here...</div>
+      </div>
+    </div>
+
+    <!-- SSE Event Stream -->
+    <div class="panel">
+      <h2><span class="status-dot connected" id="sse-dot"></span>Live Event Stream (SSE)</h2>
+      <div class="response-box event-log" id="event-log">Connecting to SSE...</div>
+    </div>
+
+    <!-- Raw Response -->
+    <div class="panel full-width">
+      <h2>Last API Response</h2>
+      <div class="response-box" id="raw-response">Make an API call to see the response here...</div>
+    </div>
+  </div>
+
+  <script>
+    let selectedAssetId = null;
+    const API = '';
+
+    function showResponse(data) {
+      document.getElementById('raw-response').textContent = JSON.stringify(data, null, 2);
+    }
+
+    function showActionResponse(data) {
+      document.getElementById('action-response').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function apiCall(method, path, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(API + path, opts);
+      const data = res.status === 204 ? { status: 204, message: 'Deleted' } : await res.json();
+      showResponse(data);
+      return data;
+    }
+
+    async function createAsset() {
+      const title = document.getElementById('create-title').value;
+      const contentType = document.getElementById('create-type').value;
+      const description = document.getElementById('create-desc').value || undefined;
+      const data = await apiCall('POST', '/assets', { title, contentType, description });
+      if (data.id) {
+        selectAsset(data.id);
+        loadAssets();
+      }
+    }
+
+    async function loadAssets() {
+      const status = document.getElementById('filter-status').value;
+      const type = document.getElementById('filter-type').value;
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (type) params.set('contentType', type);
+      const query = params.toString() ? '?' + params.toString() : '';
+      const data = await apiCall('GET', '/assets' + query);
+      renderAssetList(data);
+    }
+
+    function renderAssetList(assets) {
+      const list = document.getElementById('asset-list');
+      if (!assets.length) {
+        list.innerHTML = '<div style="color:#8b949e;font-size:0.85rem;padding:8px;">No assets found</div>';
+        return;
+      }
+      list.innerHTML = assets.map(a => `
+        <div class="asset-row ${a.id === selectedAssetId ? 'selected' : ''}" onclick="selectAsset('${a.id}')">
+          <div>
+            <div class="title">${a.title}</div>
+            <div class="meta">${a.contentType} &middot; ${a.id.slice(0, 8)}...</div>
+          </div>
+          <span class="badge ${a.status}">${a.status}</span>
+        </div>
+      `).join('');
+    }
+
+    async function selectAsset(id) {
+      selectedAssetId = id;
+      const data = await apiCall('GET', '/assets/' + id);
+      document.getElementById('selected-info').textContent = `${data.title} (${data.status})`;
+      document.getElementById('asset-actions').style.display = 'block';
+      document.getElementById('action-response').textContent = JSON.stringify(data, null, 2);
+      loadAssets();
+    }
+
+    async function processAsset(fail) {
+      if (!selectedAssetId) return;
+      const data = await apiCall('POST', `/assets/${selectedAssetId}/process${fail ? '?fail=true' : ''}`);
+      showActionResponse(data);
+      loadAssets();
+    }
+
+    async function publishAsset() {
+      if (!selectedAssetId) return;
+      const data = await apiCall('PATCH', `/assets/${selectedAssetId}`, { status: 'published' });
+      showActionResponse(data);
+      loadAssets();
+    }
+
+    async function unpublishAsset() {
+      if (!selectedAssetId) return;
+      const data = await apiCall('PATCH', `/assets/${selectedAssetId}`, { status: 'unpublished' });
+      showActionResponse(data);
+      loadAssets();
+    }
+
+    async function deleteAsset() {
+      if (!selectedAssetId) return;
+      const data = await apiCall('DELETE', `/assets/${selectedAssetId}`);
+      showActionResponse(data);
+      selectedAssetId = null;
+      document.getElementById('selected-info').textContent = 'No asset selected';
+      document.getElementById('asset-actions').style.display = 'none';
+      loadAssets();
+    }
+
+    async function viewHistory() {
+      if (!selectedAssetId) return;
+      const data = await apiCall('GET', `/assets/${selectedAssetId}/history`);
+      showActionResponse(data);
+    }
+
+    // SSE
+    function connectSSE() {
+      const log = document.getElementById('event-log');
+      const dot = document.getElementById('sse-dot');
+      const es = new EventSource(API + '/events');
+
+      es.onopen = () => {
+        dot.className = 'status-dot connected';
+        log.innerHTML = '<div style="color:#238636;">Connected to event stream</div>';
+      };
+
+      es.onmessage = (e) => {
+        const event = JSON.parse(e.data);
+        const typeClass = event.type.includes('created') ? 'created'
+          : event.type.includes('complete') ? 'complete'
+          : event.type.includes('failed') ? 'failed'
+          : event.type.includes('published') && !event.type.includes('un') ? 'published'
+          : event.type.includes('unpublished') ? 'unpublished'
+          : event.type.includes('deleted') ? 'deleted'
+          : 'updated';
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'event-entry';
+        entry.innerHTML = `<span class="event-type ${typeClass}">${event.type}</span> <span class="event-time">${time}</span><br><span style="color:#8b949e;font-size:0.75rem;">${event.data.title} (${event.data.status})</span>`;
+        log.prepend(entry);
+      };
+
+      es.onerror = () => {
+        dot.className = 'status-dot disconnected';
+      };
+    }
+
+    connectSSE();
+    loadAssets();
+  </script>
+</body>
+</html>
