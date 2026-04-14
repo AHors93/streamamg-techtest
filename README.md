@@ -22,208 +22,26 @@ The server starts on `http://localhost:3000` by default (override with `PORT` en
 
 A browser-based test console is available at `http://localhost:3000` — it provides a UI for creating assets, triggering state changes, viewing the audit log, and watching SSE events stream in real-time. See [TESTING.md](./TESTING.md) for structured testing paths.
 
+Interactive API documentation (Swagger UI) is served at `http://localhost:3000/docs`. The spec lives in [openapi.yaml](./openapi.yaml) and is hand-written (not generated from code).
+
 ## API Endpoints
 
-### Create Asset
+Full endpoint documentation — including request bodies, response schemas, and every error case — is available via **Swagger UI at [http://localhost:3000/docs](http://localhost:3000/docs)** once the server is running. The spec itself lives in [openapi.yaml](./openapi.yaml).
 
-```bash
-curl -X POST http://localhost:3000/assets \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Match Highlights", "contentType": "video", "description": "Premier League highlights"}'
-```
+Quick reference:
 
-Response `201`:
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Match Highlights",
-  "description": "Premier League highlights",
-  "contentType": "video",
-  "status": "processing",
-  "createdAt": "2026-04-13T20:00:00.000Z",
-  "updatedAt": "2026-04-13T20:00:00.000Z"
-}
-```
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/assets` | Create a new asset (starts as `processing`) |
+| `GET` | `/assets` | List assets with optional `?status=` and `?contentType=` filters |
+| `GET` | `/assets/:id` | Get a single asset |
+| `PATCH` | `/assets/:id` | Update title/description or transition to `published`/`unpublished` |
+| `DELETE` | `/assets/:id` | Delete an asset |
+| `POST` | `/assets/:id/process` | Simulate processing completion (or `?fail=true` to simulate failure) |
+| `GET` | `/assets/:id/history` | Audit trail of every state change for an asset |
+| `GET` | `/events` | Server-Sent Events stream of all asset state changes |
 
-Response `400` (validation error):
-```json
-{
-  "error": "Validation failed",
-  "details": [
-    { "path": "title", "message": "Required" },
-    { "path": "contentType", "message": "Invalid enum value. Expected 'video' | 'audio' | 'live-stream', received 'podcast'" }
-  ]
-}
-```
-
-### List Assets (with filtering)
-
-```bash
-# All assets
-curl http://localhost:3000/assets
-
-# Filter by status
-curl http://localhost:3000/assets?status=published
-
-# Filter by content type
-curl http://localhost:3000/assets?contentType=video
-
-# Both filters
-curl "http://localhost:3000/assets?status=ready&contentType=audio"
-```
-
-Response `200`:
-```json
-[
-  {
-    "id": "550e8400-...",
-    "title": "Match Highlights",
-    "contentType": "video",
-    "status": "published",
-    "url": "https://cdn.streamamg.com/media/550e8400-.../playlist.m3u8",
-    "duration": 3600,
-    "createdAt": "2026-04-13T20:00:00.000Z",
-    "updatedAt": "2026-04-13T20:01:00.000Z"
-  }
-]
-```
-
-### Get Single Asset
-
-```bash
-curl http://localhost:3000/assets/:id
-```
-
-Response `200`:
-```json
-{
-  "id": "550e8400-...",
-  "title": "Match Highlights",
-  "contentType": "video",
-  "status": "ready",
-  "url": "https://cdn.streamamg.com/media/550e8400-.../playlist.m3u8",
-  "duration": 3600,
-  "createdAt": "2026-04-13T20:00:00.000Z",
-  "updatedAt": "2026-04-13T20:00:30.000Z"
-}
-```
-
-Response `404`:
-```json
-{ "error": "Asset not found" }
-```
-
-### Update Asset
-
-```bash
-curl -X PATCH http://localhost:3000/assets/:id \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Updated Title"}'
-
-# Publish (asset must be in 'ready' status)
-curl -X PATCH http://localhost:3000/assets/:id \
-  -H "Content-Type: application/json" \
-  -d '{"status": "published"}'
-```
-
-Response `200`:
-```json
-{
-  "id": "550e8400-...",
-  "title": "Updated Title",
-  "contentType": "video",
-  "status": "published",
-  "createdAt": "2026-04-13T20:00:00.000Z",
-  "updatedAt": "2026-04-13T20:02:00.000Z"
-}
-```
-
-Response `409` (invalid status transition):
-```json
-{ "error": "Invalid status transition: processing → published" }
-```
-
-### Delete Asset
-
-```bash
-curl -X DELETE http://localhost:3000/assets/:id
-```
-
-Response `204`: No content
-
-### Simulate Processing
-
-```bash
-# Complete processing (sets status to 'ready', assigns CDN URL)
-curl -X POST http://localhost:3000/assets/:id/process
-
-# Simulate failure
-curl -X POST http://localhost:3000/assets/:id/process?fail=true
-```
-
-Response `200` (success):
-```json
-{
-  "id": "550e8400-...",
-  "title": "Match Highlights",
-  "contentType": "video",
-  "status": "ready",
-  "createdAt": "2026-04-13T20:00:00.000Z",
-  "updatedAt": "2026-04-13T20:00:30.000Z"
-}
-```
-
-Response `200` (failure):
-```json
-{
-  "id": "550e8400-...",
-  "title": "Match Highlights",
-  "contentType": "video",
-  "status": "failed",
-  "createdAt": "2026-04-13T20:00:00.000Z",
-  "updatedAt": "2026-04-13T20:00:30.000Z"
-}
-```
-
-### Asset History (Audit Log)
-
-```bash
-curl http://localhost:3000/assets/:id/history
-```
-
-Response `200`:
-```json
-[
-  {
-    "assetId": "550e8400-...",
-    "action": "asset.created",
-    "timestamp": "2026-04-13T20:00:00.000Z",
-    "assetTitle": "Match Highlights",
-    "details": { "status": "processing" }
-  },
-  {
-    "assetId": "550e8400-...",
-    "action": "asset.processing.complete",
-    "timestamp": "2026-04-13T20:00:05.000Z",
-    "assetTitle": "Match Highlights",
-    "details": { "status": "ready" }
-  }
-]
-```
-
-This is a downstream action driven entirely by the event system — every asset state change is recorded automatically via event listeners, demonstrating a real-world use of the event-driven architecture.
-
-### SSE Event Stream
-
-```bash
-curl -N http://localhost:3000/events
-```
-
-Events are emitted for: `asset.created`, `asset.updated`, `asset.processing.complete`, `asset.processing.failed`, `asset.published`, `asset.unpublished`, `asset.deleted`.
-
-```json
-data: {"type":"asset.published","assetId":"550e8400-...","timestamp":"2026-04-13T20:01:00.000Z","data":{...}}
-```
+Events emitted: `asset.created`, `asset.updated`, `asset.processing.complete`, `asset.processing.failed`, `asset.published`, `asset.unpublished`, `asset.deleted`.
 
 ## Asset Status Flow
 
@@ -247,7 +65,7 @@ processing → failed
 - **Service layer owns all business rules** — the store is dumb storage, handlers are dumb HTTP translation. Status transitions, event emission, and validation all live in one place
 - **`/assets/:id/process` simulation endpoint** — deterministic testing of the full event flow without `setTimeout` hacks or fake async processing - this is a good article i've used before and was useful for this test - https://medium.com/@promptedmind28/deterministic-software-testing-vs-non-deterministic-llm-agent-testing-what-you-need-to-know-f3abd5f9009d 
 - **Audit log as event-driven downstream action** — every state change is recorded via event listeners, not inline in the service. This demonstrates real decoupling: the service doesn't know about the audit log, it just emits events
-- **No generated API docs at this point** — curl examples in the README are clearer and more useful than a Swagger spec for a project this size. In the next iteration this is something I would implement as I think it would be useful to have proper docs for this that other team members can reference
+- **Hand-written OpenAPI spec served via Swagger UI at `/docs`** — the spec in `openapi.yaml` is hand-written rather than generated from code decorators. This avoids the "decorators everywhere" pattern and keeps the spec as a single readable document. The README stays focused on setup, architecture, and decisions; detailed request/response examples live in the spec
 
 ## Scaling for Peak Usage
 

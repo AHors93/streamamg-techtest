@@ -6,6 +6,7 @@ import { AssetService } from './services/asset-service.js';
 import { AssetHandler } from './handlers/asset-handler.js';
 import { createAssetRoutes } from './routes/asset-routes.js';
 import { createSseRoutes } from './routes/sse-routes.js';
+import { createDocsRoutes } from './routes/docs-routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { registerEventHandlers } from './events/event-handlers.js';
 
@@ -22,6 +23,7 @@ export function createApp() {
   app.use(express.static(path.join(process.cwd(), 'public')));
   app.use('/assets', createAssetRoutes(handler));
   app.use('/events', createSseRoutes());
+  app.use('/docs', createDocsRoutes());
   app.use(errorHandler);
 
   return { app, store, auditStore };

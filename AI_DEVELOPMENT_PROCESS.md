@@ -128,7 +128,7 @@ This document captures how AI tooling (Claude Code) and was used throughout this
 
 **Goal:** The brief asks to *"briefly describe how your solution could scale during peak usage periods"*.
 
-**Prompt:** *"now lets focus on how we would scale this. This is super important"*
+**Prompt:** *"now lets focus on how we would scale this. This is super important. I want you to highlight 3 key points that could be key in a streaming service, as I'm not familiar with the industry too much, lets see some options and ill decide"*
 
 **What the AI produced:**
 - A complete rewrite of the scaling section, structured around specific bottlenecks rather than generic technology lists
@@ -161,6 +161,29 @@ This document captures how AI tooling (Claude Code) and was used throughout this
 
 ---
 
+### Phase 7b: Adding Swagger Docs
+
+**Goal:** Provide nicer visual for our endpoints.
+
+**Prompt:** *"Can you tidy up the readme and move our api's into swagger documentation"*
+
+**Context:** Earlier in the project I'd explicitly decided against Swagger and the CLAUDE.md file forbade it. The AI initially pushed back on this prompt, citing the earlier decision. I challenged my own guardrails and thought as a final touch before submission it would make it cleaner.
+
+**What the AI produced:**
+- `openapi.yaml` — hand-written spec covering all 7 endpoints, all request/response schemas, and all error cases (400, 404, 409)
+- `src/routes/docs-routes.ts` — thin route module that loads the YAML at startup and mounts Swagger UI
+- Mounted at `/docs` alongside the existing test console at `/`
+- Updated the contradicting bullet in CLAUDE.md and the "Key Technical Decisions" section of the README so the docs don't argue with themselves
+
+**Human decisions made:**
+- **I overruled my earlier CLAUDE.md rule**. Rules should guide, not constrain rigidly — when context changes (we have time, the code is stable, the spec is small), the rule should update too
+- I chose a **hand-written YAML spec** over a decorator-based generator. Decorators would have been faster for the AI to scaffold but would have coupled the spec to the code in an unhelpful way. A standalone YAML file is readable, versionable, and can be shared with non-code tooling
+- **`/docs` separate from `/`** — the test console and the API docs serve different purposes. Splitting them keeps each page focused
+
+**Key insight:** The AI correctly enforced the earlier rule, which was the right default behaviour. But I was the one who set the rule, and I'm the one who overrules it when context changes. This is the pattern I want: the AI holds the line on constraints unless I explicitly lift them.
+
+---
+
 ### Phase 8: Final Requirements Audit
 
 **Goal:** Cross-reference every requirement from the brief against the implementation before submission.
@@ -190,7 +213,7 @@ This document captures how AI tooling (Claude Code) and was used throughout this
 - **Requirements gap analysis** — I spotted that the event-driven downstream action was weak (just console logging) and pushed for the audit log. The AI flagged it but I made the judgment call to implement it
 - **Scaling section quality** — the AI's first pass was generic technology lists. I pushed for bottleneck-specific analysis with real numbers (connection pooling costs, SSE connection limits, pre-warming timelines). This came from production experience, not AI generation
 - **Testing strategy** — I asked for the browser test console and SSE multi-client verification. The AI wouldn't have built a visual testing tool unprompted — it came from my instinct that proving SSE works in a real browser is more convincing than a unit test assertion
-- **Swagger pushback** — I asked about adding Swagger for API docs. The AI pushed back suggesting that time was better spent on real code implementation rather than loads of documentation, as well as sticking to the time. This was a good example of the AI applying the constraints I'd set in CLAUDE.md — it passsed the test!
+- **Holding and then lifting the Swagger rule** — early on I told the AI to avoid Swagger; later I asked to add it anyway. The AI correctly enforced the earlier rule on the first ask and only went ahead once I explicitly overruled it. That's exactly the dynamic I want: the AI is a brake when it should be, but the judgment call remains mine
 
 ### The collaboration pattern
 The most effective pattern was: **I set constraints and direction, the AI executed within them.** The CLAUDE.md file was the single most valuable artefact — it turned every prompt into a constrained problem rather than an open-ended one. Without it, the AI would have over-engineered. With it, every file traced back to a requirement. I have found that without this, it can go a bit nuts and sometimes get caught in some wild loops and gets a bit stuck.

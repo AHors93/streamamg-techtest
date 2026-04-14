@@ -1,0 +1,367 @@
+openapi: 3.0.3
+info:
+  title: StreamAMG Media Asset API
+  description: |
+    A simplified RESTful API for managing streaming media assets with event-driven state changes.
+
+    - **Status flow:** `processing` → `ready` → `published` ↔ `unpublished`, or `processing` → `failed`
+    - **Event stream:** `GET /events` exposes a Server-Sent Events (SSE) stream of all asset state changes
+    - **Audit log:** `GET /assets/{id}/history` returns every state change for an asset, populated via event listeners
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Assets
+    description: CRUD operations and state transitions
+  - name: Events
+    description: Real-time event streaming
+
+paths:
+  /assets:
+    post:
+      tags: [Assets]
+      summary: Create a new asset
+      description: Creates an asset with status `processing`. Title and contentType are required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetInput'
+            example:
+              title: Match Highlights
+              contentType: video
+              description: Premier League highlights
+      responses:
+        '201':
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+    get:
+      tags: [Assets]
+      summary: List assets (with optional filtering)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/AssetStatus'
+        - in: query
+          name: contentType
+          schema:
+            $ref: '#/components/schemas/ContentType'
+      responses:
+        '200':
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '400':
+          description: Invalid filter value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /assets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/AssetId'
+    get:
+      tags: [Assets]
+      summary: Get a single asset by ID
+      responses:
+        '200':
+          description: Asset found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '404':
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+    patch:
+      tags: [Assets]
+      summary: Update an asset
+      description: |
+        Update the asset's title, description, or transition status.
+        Only `published` and `unpublished` transitions are allowed via this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAssetInput'
+            examples:
+              updateTitle:
+                summary: Update title
+                value:
+                  title: New Title
+              publish:
+                summary: Publish (must be in `ready` status)
+                value:
+                  status: published
+              unpublish:
+                summary: Unpublish
+                value:
+                  status: unpublished
+      responses:
+        '200':
+          description: Asset updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Asset not found
+        '409':
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransitionError'
+    delete:
+      tags: [Assets]
+      summary: Delete an asset
+      responses:
+        '204':
+          description: Asset deleted
+        '404':
+          description: Asset not found
+
+  /assets/{id}/process:
+    parameters:
+      - $ref: '#/components/parameters/AssetId'
+    post:
+      tags: [Assets]
+      summary: Simulate processing completion
+      description: |
+        Simulates the completion of transcoding. In production this would be a callback
+        from a transcoding pipeline. On success, the asset transitions to `ready` and
+        an event handler auto-assigns a CDN URL and duration.
+      parameters:
+        - in: query
+          name: fail
+          schema:
+            type: boolean
+          description: If `true`, transitions to `failed` instead of `ready`.
+      responses:
+        '200':
+          description: Processing complete (or failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '404':
+          description: Asset not found
+        '409':
+          description: Asset is not in `processing` status
+
+  /assets/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/AssetId'
+    get:
+      tags: [Assets]
+      summary: Get the audit trail for an asset
+      description: |
+        Returns every state change event recorded for this asset. The audit log is
+        populated via event listeners — every emitted event results in an audit entry.
+      responses:
+        '200':
+          description: Audit entries for the asset
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+        '404':
+          description: Asset not found
+
+  /events:
+    get:
+      tags: [Events]
+      summary: Subscribe to the real-time event stream (SSE)
+      description: |
+        Opens a Server-Sent Events (SSE) connection. The server will push every asset
+        state change to the client as `data:` lines until the client disconnects.
+
+        Example event frame:
+        ```
+        data: {"type":"asset.published","assetId":"550e8400-...","timestamp":"2026-04-14T10:00:00Z","data":{...}}
+        ```
+      responses:
+        '200':
+          description: SSE stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+components:
+  parameters:
+    AssetId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    AssetStatus:
+      type: string
+      enum: [processing, ready, published, unpublished, failed]
+
+    ContentType:
+      type: string
+      enum: [video, audio, live-stream]
+
+    Asset:
+      type: object
+      required: [id, title, contentType, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 1000
+        contentType:
+          $ref: '#/components/schemas/ContentType'
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        url:
+          type: string
+          format: uri
+          description: Set automatically when processing completes.
+        duration:
+          type: number
+          description: Duration in seconds. Set when processing completes.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        title: Match Highlights
+        description: Premier League highlights
+        contentType: video
+        status: ready
+        url: https://cdn.streamamg.com/media/550e8400-.../playlist.m3u8
+        duration: 3600
+        createdAt: '2026-04-14T10:00:00.000Z'
+        updatedAt: '2026-04-14T10:00:30.000Z'
+
+    CreateAssetInput:
+      type: object
+      required: [title, contentType]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contentType:
+          $ref: '#/components/schemas/ContentType'
+        description:
+          type: string
+          maxLength: 1000
+
+    UpdateAssetInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 1000
+        status:
+          type: string
+          enum: [published, unpublished]
+
+    AuditEntry:
+      type: object
+      required: [assetId, action, timestamp, assetTitle, details]
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+            - asset.created
+            - asset.updated
+            - asset.processing.complete
+            - asset.processing.failed
+            - asset.published
+            - asset.unpublished
+            - asset.deleted
+        timestamp:
+          type: string
+          format: date-time
+        assetTitle:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ValidationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Validation failed
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+
+    NotFoundError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Asset not found
+
+    TransitionError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: 'Invalid status transition: processing → published'

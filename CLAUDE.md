@@ -68,7 +68,7 @@ A simplified RESTful API for managing streaming media assets, built as a technic
 - Event emitter is a thin layer, not an over-abstracted message bus
 - SSE over WebSockets — simpler, unidirectional, right tool for the job
 - In-memory Map for storage — this is a 2-hour POC, not a production system
-- No generated Swagger/OpenAPI — document endpoints in README with curl examples
+- OpenAPI spec is hand-written in `openapi.yaml` and served via Swagger UI at `/docs`. No code-generated specs, no decorator-based auto-generation — the spec is a single readable YAML file
 - Tests verify behaviour, not implementation details
 
 ## What NOT To Do

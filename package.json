@@ -17,13 +17,16 @@
   },
   "dependencies": {
     "express": "^4.21.0",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^10.0.0",
+    "yaml": "^2.8.3",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.0",
     "@types/supertest": "^6.0.2",
+    "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.4",
     "eslint": "^10.2.0",
